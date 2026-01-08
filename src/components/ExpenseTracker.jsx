@@ -1,18 +1,19 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { Plus, TrendingUp, TrendingDown, ShoppingCart, Calendar } from 'lucide-react';
+import { Plus, TrendingUp, TrendingDown, ShoppingCart, Calendar, LogOut } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/use-toast';
+import { useAuth } from '@/contexts/AuthContext';
 import ProductList from '@/components/ProductList';
 import AddProductDialog from '@/components/AddProductDialog';
 import MonthSelector from '@/components/MonthSelector';
 import StatsCard from '@/components/StatsCard';
 import ExpenseChart from '@/components/ExpenseChart';
 import { supabase } from '@/lib/supabase';
-import { migrateLocalStorageToSupabase } from '@/utils/migration';
 
 const ExpenseTracker = () => {
     const { toast } = useToast();
+    const { user, signOut } = useAuth();
     const [selectedMonth, setSelectedMonth] = useState(() => {
         const now = new Date();
         return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
@@ -24,32 +25,39 @@ const ExpenseTracker = () => {
     const [isSaving, setIsSaving] = useState(false);
     const [previousMonthTotal, setPreviousMonthTotal] = useState(0);
 
-    // Migrar dados do localStorage para Supabase (executa uma vez)
-    useEffect(() => {
-        const runMigration = async () => {
-            const result = await migrateLocalStorageToSupabase();
-
-            if (result.success && !result.alreadyMigrated && result.count > 0) {
-                toast({
-                    title: "Migração Concluída",
-                    description: `${result.count} produtos foram migrados para a nuvem com sucesso!`,
-                });
-            }
-        };
-
-        runMigration();
-    }, [toast]);
-
     // Load data from Supabase
     useEffect(() => {
         const loadProducts = async () => {
+            if (!user) return;
+
             setIsLoading(true);
             try {
-                // Carregar produtos do mês atual
+                // Adotar produtos órfãos (produtos sem user_id) antes de carregar
+                const { data: orphanedProducts } = await supabase
+                    .from('products')
+                    .select('id')
+                    .is('user_id', null);
+
+                if (orphanedProducts && orphanedProducts.length > 0) {
+                    const { error: adoptError } = await supabase
+                        .from('products')
+                        .update({ user_id: user.id })
+                        .is('user_id', null);
+
+                    if (!adoptError) {
+                        toast({
+                            title: "Produtos Migrados",
+                            description: `${orphanedProducts.length} produtos existentes foram vinculados à sua conta.`,
+                        });
+                    }
+                }
+
+                // Carregar produtos do mês atual filtrados por user_id
                 const { data, error } = await supabase
                     .from('products')
                     .select('*')
                     .eq('month_key', selectedMonth)
+                    .eq('user_id', user.id)
                     .order('created_at', { ascending: false });
 
                 if (error) throw error;
@@ -70,7 +78,8 @@ const ExpenseTracker = () => {
                 const { data: prevData, error: prevError } = await supabase
                     .from('products')
                     .select('price, quantity')
-                    .eq('month_key', prevMonth);
+                    .eq('month_key', prevMonth)
+                    .eq('user_id', user.id);
 
                 if (!prevError && prevData) {
                     const prevTotal = prevData.reduce((sum, p) => sum + (p.price * p.quantity), 0);
@@ -82,45 +91,18 @@ const ExpenseTracker = () => {
                 console.error('Erro ao carregar produtos:', error);
                 toast({
                     title: "Erro ao Carregar",
-                    description: "Não foi possível carregar os produtos. Tentando localStorage...",
+                    description: "Não foi possível carregar os produtos.",
                     variant: "destructive"
                 });
-
-                // Fallback para localStorage
-                const savedData = localStorage.getItem('expenseTrackerData');
-                if (savedData) {
-                    try {
-                        const data = JSON.parse(savedData);
-                        const monthData = data[selectedMonth] || [];
-                        const migratedData = monthData.map(p => ({
-                            ...p,
-                            category: p.category || 'Outros'
-                        }));
-                        setProducts(migratedData);
-
-                        // Calcular total do mês anterior do localStorage
-                        const [year, month] = selectedMonth.split('-').map(Number);
-                        const prevDate = new Date(year, month - 2, 1);
-                        const prevMonth = `${prevDate.getFullYear()}-${String(prevDate.getMonth() + 1).padStart(2, '0')}`;
-                        const prevMonthData = data[prevMonth] || [];
-                        const prevTotal = prevMonthData.reduce((sum, p) => sum + (p.price * p.quantity), 0);
-                        setPreviousMonthTotal(prevTotal);
-                    } catch (e) {
-                        console.error('Erro ao carregar do localStorage:', e);
-                        setProducts([]);
-                        setPreviousMonthTotal(0);
-                    }
-                } else {
-                    setProducts([]);
-                    setPreviousMonthTotal(0);
-                }
+                setProducts([]);
+                setPreviousMonthTotal(0);
             } finally {
                 setIsLoading(false);
             }
         };
 
         loadProducts();
-    }, [selectedMonth, toast]);
+    }, [selectedMonth, user, toast]);
 
     const formatCurrency = (value) => {
         return value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
@@ -135,6 +117,7 @@ const ExpenseTracker = () => {
                 price: product.price || 0,
                 category: product.category || 'Outros',
                 month_key: selectedMonth,
+                user_id: user.id,
                 created_at: new Date().toISOString()
             };
 
@@ -302,22 +285,46 @@ const ExpenseTracker = () => {
                     <div>
                         <h1 className="text-4xl font-bold text-slate-800 flex items-center gap-3">
                             <ShoppingCart className="w-10 h-10 text-blue-600" />
-                            Rastreador de Compras
+                            Ajudante de Compras
                         </h1>
                         <p className="text-slate-600 mt-2">Acompanhe e compare suas despesas mensais de compras</p>
                     </div>
-                    <Button
-                        onClick={() => {
-                            setEditingProduct(null);
-                            setIsAddDialogOpen(true);
-                        }}
-                        disabled={isSaving}
-                        className="bg-blue-600 hover:bg-blue-700 text-white transition-all duration-200 shadow-lg hover:shadow-xl"
-                        size="lg"
-                    >
-                        <Plus className="w-5 h-5 mr-2" />
-                        {isSaving ? 'Salvando...' : 'Adicionar Produto'}
-                    </Button>
+                    <div className="flex gap-2">
+                        <Button
+                            onClick={async () => {
+                                try {
+                                    await signOut();
+                                    toast({
+                                        title: "Logout realizado",
+                                        description: "Até logo!",
+                                    });
+                                } catch (error) {
+                                    toast({
+                                        title: "Erro ao sair",
+                                        description: error.message,
+                                        variant: "destructive"
+                                    });
+                                }
+                            }}
+                            variant="outline"
+                            className="border-slate-300"
+                        >
+                            <LogOut className="w-4 h-4 mr-2" />
+                            Sair
+                        </Button>
+                        <Button
+                            onClick={() => {
+                                setEditingProduct(null);
+                                setIsAddDialogOpen(true);
+                            }}
+                            disabled={isSaving}
+                            className="bg-blue-600 hover:bg-blue-700 text-white transition-all duration-200 shadow-lg hover:shadow-xl"
+                            size="lg"
+                        >
+                            <Plus className="w-5 h-5 mr-2" />
+                            {isSaving ? 'Salvando...' : 'Adicionar Produto'}
+                        </Button>
+                    </div>
                 </div>
 
                 <MonthSelector selectedMonth={selectedMonth} onMonthChange={setSelectedMonth} />
