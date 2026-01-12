@@ -11,8 +11,9 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/components/ui/use-toast';
-import { Plus, Check } from 'lucide-react';
+import { Plus, Check, Weight } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
+import { parsePrice } from '@/lib/utils';
 
 const DEFAULT_CATEGORIES = [
     "Bebidas", "Carnes", "Congelados", "Grãos", "Higiene", "Hortifruti",
@@ -25,7 +26,10 @@ const AddProductDialog = ({ open, onOpenChange, onAdd, editingProduct, isSaving 
         name: '',
         quantity: '',
         price: '',
-        category: 'Outros'
+        category: 'Outros',
+        isPerKg: false,
+        weightKg: '',
+        pricePerKg: ''
     });
     const [customCategory, setCustomCategory] = useState('');
     const [isCreatingCategory, setIsCreatingCategory] = useState(false);
@@ -72,12 +76,23 @@ const AddProductDialog = ({ open, onOpenChange, onAdd, editingProduct, isSaving 
         if (editingProduct) {
             setFormData({
                 name: editingProduct.name,
-                quantity: editingProduct.quantity.toString(),
-                price: editingProduct.price.toString(),
-                category: editingProduct.category || 'Outros'
+                quantity: editingProduct.quantity?.toString() || '',
+                price: editingProduct.price?.toString() || '',
+                category: editingProduct.category || 'Outros',
+                isPerKg: editingProduct.is_per_kg || false,
+                weightKg: editingProduct.weight_kg?.toString() || '',
+                pricePerKg: editingProduct.price_per_kg?.toString() || ''
             });
         } else {
-            setFormData({ name: '', quantity: '', price: '', category: 'Outros' });
+            setFormData({
+                name: '',
+                quantity: '',
+                price: '',
+                category: 'Outros',
+                isPerKg: false,
+                weightKg: '',
+                pricePerKg: ''
+            });
         }
         setIsCreatingCategory(false);
         setCustomCategory('');
@@ -95,22 +110,56 @@ const AddProductDialog = ({ open, onOpenChange, onAdd, editingProduct, isSaving 
             return;
         }
 
-        let quantity = formData.quantity === '' ? 0 : parseInt(formData.quantity);
-        let price = formData.price === '' ? 0 : parseFloat(formData.price.replace(',', '.'));
-
-        if (isNaN(quantity)) quantity = 0;
-        if (isNaN(price)) price = 0;
-
         const finalCategory = isCreatingCategory && customCategory.trim()
             ? customCategory.trim()
             : formData.category;
 
-        const productData = {
-            name: formData.name.trim(),
-            quantity,
-            price,
-            category: finalCategory
-        };
+        let productData;
+
+        if (formData.isPerKg) {
+            // MODO POR QUILO
+            const weightKg = parsePrice(formData.weightKg);
+            const pricePerKg = parsePrice(formData.pricePerKg);
+
+            if (weightKg <= 0 || pricePerKg <= 0) {
+                toast({
+                    title: "Erro de Validação",
+                    description: "Por favor, insira peso e preço por kg válidos.",
+                    variant: "destructive"
+                });
+                return;
+            }
+
+            // Calcular preço total
+            const calculatedPrice = weightKg * pricePerKg;
+
+            productData = {
+                name: formData.name.trim(),
+                quantity: 1, // Mantém 1 para compatibilidade
+                price: calculatedPrice,
+                category: finalCategory,
+                is_per_kg: true,
+                weight_kg: weightKg,
+                price_per_kg: pricePerKg
+            };
+        } else {
+            // MODO NORMAL
+            let quantity = formData.quantity === '' ? 0 : parseInt(formData.quantity);
+            let price = parsePrice(formData.price);
+
+            if (isNaN(quantity)) quantity = 0;
+            if (isNaN(price)) price = 0;
+
+            productData = {
+                name: formData.name.trim(),
+                quantity,
+                price,
+                category: finalCategory,
+                is_per_kg: false,
+                weight_kg: null,
+                price_per_kg: null
+            };
+        }
 
         if (editingProduct) {
             onAdd({ ...editingProduct, ...productData });
@@ -119,7 +168,15 @@ const AddProductDialog = ({ open, onOpenChange, onAdd, editingProduct, isSaving 
         }
 
         if (!editingProduct) {
-            setFormData({ name: '', quantity: '', price: '', category: 'Outros' });
+            setFormData({
+                name: '',
+                quantity: '',
+                price: '',
+                category: 'Outros',
+                isPerKg: false,
+                weightKg: '',
+                pricePerKg: ''
+            });
         }
 
         onOpenChange(false);
@@ -183,6 +240,31 @@ const AddProductDialog = ({ open, onOpenChange, onAdd, editingProduct, isSaving 
                             )}
                         </div>
 
+                        {/* Checkbox "Por Quilo" */}
+                        <div className="grid gap-2">
+                            <div className="flex items-center space-x-2">
+                                <input
+                                    type="checkbox"
+                                    id="isPerKg"
+                                    checked={formData.isPerKg}
+                                    onChange={(e) => {
+                                        const checked = e.target.checked;
+                                        setFormData({
+                                            ...formData,
+                                            isPerKg: checked,
+                                            // Se marcar "por kg", limpar campos de quantidade/preço
+                                            ...(checked ? { quantity: '', price: '' } : { weightKg: '', pricePerKg: '' })
+                                        });
+                                    }}
+                                    className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                                />
+                                <Label htmlFor="isPerKg" className="flex items-center gap-2 cursor-pointer">
+                                    <Weight className="w-4 h-4 text-blue-600" />
+                                    Produto vendido por quilo
+                                </Label>
+                            </div>
+                        </div>
+
                         <div className="grid gap-2">
                             <Label htmlFor="name">Nome do Produto</Label>
                             <Input
@@ -194,34 +276,85 @@ const AddProductDialog = ({ open, onOpenChange, onAdd, editingProduct, isSaving 
                             />
                         </div>
 
-                        <div className="grid grid-cols-2 gap-4">
-                            <div className="grid gap-2">
-                                <Label htmlFor="quantity">Quantidade (Opcional)</Label>
-                                <Input
-                                    id="quantity"
-                                    type="number"
-                                    min="0"
-                                    step="1"
-                                    value={formData.quantity}
-                                    onChange={(e) => setFormData({ ...formData, quantity: e.target.value })}
-                                    placeholder="0"
-                                    className="transition-all duration-200 focus:ring-2 focus:ring-blue-500"
-                                />
+                        {/* Campos condicionais baseados em isPerKg */}
+                        {!formData.isPerKg ? (
+                            // CAMPOS NORMAIS (quantidade e preço unitário)
+                            <div className="grid grid-cols-2 gap-4">
+                                <div className="grid gap-2">
+                                    <Label htmlFor="quantity">Quantidade (Opcional)</Label>
+                                    <Input
+                                        id="quantity"
+                                        type="number"
+                                        min="0"
+                                        step="1"
+                                        value={formData.quantity}
+                                        onChange={(e) => setFormData({ ...formData, quantity: e.target.value })}
+                                        placeholder="0"
+                                        className="transition-all duration-200 focus:ring-2 focus:ring-blue-500"
+                                    />
+                                </div>
+                                <div className="grid gap-2">
+                                    <Label htmlFor="price">Preço Unit. (Opcional)</Label>
+                                    <Input
+                                        id="price"
+                                        type="number"
+                                        min="0"
+                                        step="0.01"
+                                        value={formData.price}
+                                        onChange={(e) => setFormData({ ...formData, price: e.target.value })}
+                                        placeholder="0,00"
+                                        className="transition-all duration-200 focus:ring-2 focus:ring-blue-500"
+                                    />
+                                </div>
                             </div>
-                            <div className="grid gap-2">
-                                <Label htmlFor="price">Preço Unit. (Opcional)</Label>
-                                <Input
-                                    id="price"
-                                    type="number"
-                                    min="0"
-                                    step="0.01"
-                                    value={formData.price}
-                                    onChange={(e) => setFormData({ ...formData, price: e.target.value })}
-                                    placeholder="0,00"
-                                    className="transition-all duration-200 focus:ring-2 focus:ring-blue-500"
-                                />
-                            </div>
-                        </div>
+                        ) : (
+                            // CAMPOS POR QUILO (peso em kg e preço por kg)
+                            <>
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div className="grid gap-2">
+                                        <Label htmlFor="weightKg">Peso (kg)</Label>
+                                        <Input
+                                            id="weightKg"
+                                            type="number"
+                                            min="0"
+                                            step="0.001"
+                                            value={formData.weightKg}
+                                            onChange={(e) => setFormData({ ...formData, weightKg: e.target.value })}
+                                            placeholder="0.000"
+                                            className="transition-all duration-200 focus:ring-2 focus:ring-blue-500"
+                                        />
+                                    </div>
+                                    <div className="grid gap-2">
+                                        <Label htmlFor="pricePerKg">Preço/kg (R$)</Label>
+                                        <Input
+                                            id="pricePerKg"
+                                            type="number"
+                                            min="0"
+                                            step="0.01"
+                                            value={formData.pricePerKg}
+                                            onChange={(e) => setFormData({ ...formData, pricePerKg: e.target.value })}
+                                            placeholder="0,00"
+                                            className="transition-all duration-200 focus:ring-2 focus:ring-blue-500"
+                                        />
+                                    </div>
+                                </div>
+
+                                {/* Preview do cálculo quando for "por kg" */}
+                                {formData.weightKg && formData.pricePerKg && (
+                                    <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                                        <p className="text-sm text-slate-600">
+                                            Total calculado: {' '}
+                                            <span className="font-bold text-blue-600">
+                                                {(parsePrice(formData.weightKg) * parsePrice(formData.pricePerKg)).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                                            </span>
+                                        </p>
+                                        <p className="text-xs text-slate-500 mt-1">
+                                            {formData.weightKg} kg × R$ {formData.pricePerKg}/kg
+                                        </p>
+                                    </div>
+                                )}
+                            </>
+                        )}
                     </div>
                     <DialogFooter>
                         <Button

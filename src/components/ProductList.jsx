@@ -1,6 +1,6 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Edit2, Trash2, Package, Layers } from 'lucide-react';
+import { Edit2, Trash2, Package, Layers, Weight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {
@@ -15,8 +15,11 @@ import {
     AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
 import { Badge } from '@/components/ui/badge';
+import { parsePrice } from '@/lib/utils';
 
 const ProductList = ({ products, onEdit, onDelete, onQuickUpdate }) => {
+    const [editingValues, setEditingValues] = useState({});
+
     const formatCurrency = (value) => {
         return value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
     };
@@ -33,7 +36,11 @@ const ProductList = ({ products, onEdit, onDelete, onQuickUpdate }) => {
                 };
             }
             groups[category].items.push(product);
-            groups[category].total += (product.price * product.quantity);
+            // Cálculo condicional baseado em is_per_kg
+            const itemTotal = product.is_per_kg
+                ? (product.weight_kg * product.price_per_kg)
+                : (product.price * product.quantity);
+            groups[category].total += itemTotal;
         });
 
         // Sort categories alphabetically, put 'Outros' last if exists
@@ -44,14 +51,49 @@ const ProductList = ({ products, onEdit, onDelete, onQuickUpdate }) => {
         });
     }, [products]);
 
+    const handleInputFocus = (id, field, currentValue) => {
+        const key = `${id}-${field}`;
+        setEditingValues(prev => ({
+            ...prev,
+            [key]: currentValue.toString()
+        }));
+    };
+
     const handleInputChange = (id, field, value) => {
-        let parsedValue = value;
+        const key = `${id}-${field}`;
+        setEditingValues(prev => ({
+            ...prev,
+            [key]: value
+        }));
+    };
+
+    const handleInputBlur = (id, field) => {
+        const key = `${id}-${field}`;
+        const value = editingValues[key];
+
+        if (value === undefined) return;
+
+        let parsedValue;
         if (field === 'quantity') {
             parsedValue = parseInt(value) || 0;
         } else if (field === 'price') {
-            parsedValue = parseFloat(value) || 0;
+            parsedValue = parsePrice(value);
         }
+
         onQuickUpdate(id, field, parsedValue);
+
+        setEditingValues(prev => {
+            const newValues = { ...prev };
+            delete newValues[key];
+            return newValues;
+        });
+    };
+
+    const getInputValue = (id, field, productValue) => {
+        const key = `${id}-${field}`;
+        return editingValues[key] !== undefined
+            ? editingValues[key]
+            : (productValue === 0 ? '' : productValue);
     };
 
     if (products.length === 0) {
@@ -101,6 +143,15 @@ const ProductList = ({ products, onEdit, onDelete, onQuickUpdate }) => {
                                     <div className="flex-1 min-w-[200px]">
                                         <div className="flex items-center gap-2">
                                             <h3 className="font-semibold text-slate-800 text-lg leading-tight">{product.name}</h3>
+
+                                            {/* Badge "Por Kg" */}
+                                            {product.is_per_kg && (
+                                                <Badge className="bg-green-100 text-green-700 border-green-300">
+                                                    <Weight className="w-3 h-3 mr-1" />
+                                                    Por Kg
+                                                </Badge>
+                                            )}
+
                                             <Button
                                                 variant="ghost"
                                                 size="sm"
@@ -110,43 +161,66 @@ const ProductList = ({ products, onEdit, onDelete, onQuickUpdate }) => {
                                                 <Edit2 className="w-3 h-3" />
                                             </Button>
                                         </div>
-                                        <div className="text-xs text-slate-500 mt-1 sm:hidden">
-                                            Total: <span className="font-bold text-blue-600">{formatCurrency(product.price * product.quantity)}</span>
-                                        </div>
+
+                                        {/* Informação detalhada para produtos por kg */}
+                                        {product.is_per_kg ? (
+                                            <div className="text-xs text-slate-500 mt-1">
+                                                {product.weight_kg}kg × {formatCurrency(product.price_per_kg)}/kg = {' '}
+                                                <span className="font-bold text-blue-600">
+                                                    {formatCurrency(product.weight_kg * product.price_per_kg)}
+                                                </span>
+                                            </div>
+                                        ) : (
+                                            <div className="text-xs text-slate-500 mt-1 sm:hidden">
+                                                Total: <span className="font-bold text-blue-600">{formatCurrency(product.price * product.quantity)}</span>
+                                            </div>
+                                        )}
                                     </div>
 
-                                    {/* Quick Edit Inputs */}
+                                    {/* Quick Edit Inputs - DESABILITADO para produtos por kg */}
                                     <div className="flex gap-3 items-center flex-1 sm:flex-none">
                                         <div className="flex flex-col w-20">
-                                            <span className="text-[10px] text-slate-500 uppercase font-bold mb-1">Qtd</span>
+                                            <span className="text-[10px] text-slate-500 uppercase font-bold mb-1">
+                                                {product.is_per_kg ? 'Peso' : 'Qtd'}
+                                            </span>
                                             <Input
                                                 type="number"
                                                 min="0"
-                                                value={product.quantity === 0 ? '' : product.quantity}
-                                                onChange={(e) => handleInputChange(product.id, 'quantity', e.target.value)}
+                                                value={product.is_per_kg ? product.weight_kg : getInputValue(product.id, 'quantity', product.quantity)}
+                                                onFocus={() => !product.is_per_kg && handleInputFocus(product.id, 'quantity', product.quantity)}
+                                                onChange={(e) => !product.is_per_kg && handleInputChange(product.id, 'quantity', e.target.value)}
+                                                onBlur={() => !product.is_per_kg && handleInputBlur(product.id, 'quantity')}
                                                 placeholder="0"
                                                 className="h-9 bg-white text-center font-medium"
+                                                disabled={product.is_per_kg}
                                             />
                                         </div>
 
                                         <div className="flex flex-col w-28">
-                                            <span className="text-[10px] text-slate-500 uppercase font-bold mb-1">Preço (R$)</span>
+                                            <span className="text-[10px] text-slate-500 uppercase font-bold mb-1">
+                                                {product.is_per_kg ? 'R$/kg' : 'Preço (R$)'}
+                                            </span>
                                             <Input
-                                                type="number"
-                                                min="0"
-                                                step="0.01"
-                                                value={product.price === 0 ? '' : product.price}
-                                                onChange={(e) => handleInputChange(product.id, 'price', e.target.value)}
+                                                type="text"
+                                                inputMode="decimal"
+                                                value={product.is_per_kg ? product.price_per_kg : getInputValue(product.id, 'price', product.price)}
+                                                onFocus={() => !product.is_per_kg && handleInputFocus(product.id, 'price', product.price)}
+                                                onChange={(e) => !product.is_per_kg && handleInputChange(product.id, 'price', e.target.value)}
+                                                onBlur={() => !product.is_per_kg && handleInputBlur(product.id, 'price')}
                                                 placeholder="0.00"
                                                 className="h-9 bg-white text-right font-medium"
+                                                disabled={product.is_per_kg}
                                             />
                                         </div>
 
                                         <div className="hidden sm:flex flex-col w-28 text-right px-2">
                                             <span className="text-[10px] text-slate-500 uppercase font-bold mb-1">Total</span>
                                             <span className="font-bold text-blue-600 text-lg leading-8">
-                         {formatCurrency(product.price * product.quantity)}
-                       </span>
+                                                {product.is_per_kg
+                                                    ? formatCurrency(product.weight_kg * product.price_per_kg)
+                                                    : formatCurrency(product.price * product.quantity)
+                                                }
+                                            </span>
                                         </div>
                                     </div>
 

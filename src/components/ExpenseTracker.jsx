@@ -9,6 +9,8 @@ import AddProductDialog from '@/components/AddProductDialog';
 import MonthSelector from '@/components/MonthSelector';
 import StatsCard from '@/components/StatsCard';
 import ExpenseChart from '@/components/ExpenseChart';
+import FloatingAddButton from '@/components/FloatingAddButton';
+import ScrollHeader from '@/components/ScrollHeader';
 import { supabase } from '@/lib/supabase';
 
 const ExpenseTracker = () => {
@@ -118,7 +120,10 @@ const ExpenseTracker = () => {
                 category: product.category || 'Outros',
                 month_key: selectedMonth,
                 user_id: user.id,
-                created_at: new Date().toISOString()
+                created_at: new Date().toISOString(),
+                is_per_kg: product.is_per_kg || false,
+                weight_kg: product.weight_kg || null,
+                price_per_kg: product.price_per_kg || null
             };
 
             const { data, error } = await supabase
@@ -132,8 +137,13 @@ const ExpenseTracker = () => {
             // Adiciona o produto na lista local
             setProducts(prevProducts => [data, ...prevProducts]);
 
-            // Only show toast if full details were added, otherwise it's a quick add
-            if (product.quantity > 0 && product.price > 0) {
+            // Toast diferenciado para produtos por kg
+            if (product.is_per_kg) {
+                toast({
+                    title: "Produto Adicionado",
+                    description: `${product.name} (${product.weight_kg}kg × R$ ${product.price_per_kg}/kg)`,
+                });
+            } else if (product.quantity > 0 && product.price > 0) {
                 toast({
                     title: "Produto Adicionado",
                     description: `${product.name} foi adicionado à categoria ${product.category}.`,
@@ -170,7 +180,10 @@ const ExpenseTracker = () => {
                 quantity: updatedProduct.quantity || 0,
                 price: updatedProduct.price || 0,
                 category: updatedProduct.category || 'Outros',
-                updated_at: new Date().toISOString()
+                updated_at: new Date().toISOString(),
+                is_per_kg: updatedProduct.is_per_kg || false,
+                weight_kg: updatedProduct.weight_kg || null,
+                price_per_kg: updatedProduct.price_per_kg || null
             };
 
             const { error } = await supabase
@@ -274,7 +287,13 @@ const ExpenseTracker = () => {
     const percentageChange = previousMonthTotal > 0 ? ((difference / previousMonthTotal) * 100) : 0;
 
     return (
-        <div className="container mx-auto px-4 py-8 max-w-7xl">
+        <div className="container mx-auto px-4 py-8 pb-24 max-w-7xl">
+            <ScrollHeader
+                total={currentTotal}
+                productCount={products.length}
+                formatCurrency={formatCurrency}
+            />
+
             <motion.div
                 initial={{ opacity: 0, y: -20 }}
                 animate={{ opacity: 1, y: 0 }}
@@ -431,6 +450,13 @@ const ExpenseTracker = () => {
                     />
                 )}
             </motion.div>
+
+            <FloatingAddButton
+                onClick={() => {
+                    setEditingProduct(null);
+                    setIsAddDialogOpen(true);
+                }}
+            />
 
             <AddProductDialog
                 open={isAddDialogOpen}
