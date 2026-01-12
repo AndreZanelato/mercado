@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(package.json \")",
+      "Bash(npm ls:*)",
+      "Bash(npm cache clean:*)",
+      "Bash(npm install:*)",
+      "Bash(npm ci:*)",
+      "Bash(ls:*)",
+      "Bash(npm run build:*)",
+      "Bash(git add:*)",
+      "Bash(git commit -m \"$\\(cat <<''EOF''\nfix: regenerar package-lock.json para corrigir dependências do deploy\n\n- Adiciona typescript@5.9.3 como devDependency explícita\n- Regenera package-lock.json para sincronizar com package.json\n- Resolve conflito de versões do pacote yaml\n- Corrige erro no deploy Netlify: \"npm ci can only install packages when package.json and package-lock.json are in sync\"\n\nCo-Authored-By: Claude Sonnet 4.5 <noreply@anthropic.com>\nEOF\n\\)\")"
+    ]
+  }
+}
