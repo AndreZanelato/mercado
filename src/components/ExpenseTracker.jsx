@@ -11,6 +11,7 @@ import StatsCard from '@/components/StatsCard';
 import ExpenseChart from '@/components/ExpenseChart';
 import FloatingAddButton from '@/components/FloatingAddButton';
 import ScrollHeader from '@/components/ScrollHeader';
+import AdSenseBanner from '@/components/AdSenseBanner';
 import { supabase } from '@/lib/supabase';
 
 const ExpenseTracker = () => {
@@ -391,6 +392,11 @@ const ExpenseTracker = () => {
                 </motion.div>
             </div>
 
+            {/* AdSense Banner - Topo do Dashboard */}
+            <div className="mb-8">
+                <AdSenseBanner dataAdSlot="3787022488" />
+            </div>
+
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
                 <motion.div
                     initial={{ opacity: 0, x: -20 }}
@@ -450,6 +456,11 @@ const ExpenseTracker = () => {
                     />
                 )}
             </motion.div>
+
+            {/* AdSense Banner - Fim da Lista */}
+            <div className="mb-20">
+                <AdSenseBanner dataAdSlot="4209678402" />
+            </div>
 
             <FloatingAddButton
                 onClick={() => {

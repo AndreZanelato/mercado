@@ -1,6 +1,7 @@
 import React from 'react';
 import { motion } from 'framer-motion';
 import { ShoppingCart } from 'lucide-react';
+import AdSenseBanner from '../AdSenseBanner';
 
 const AuthLayout = ({ children, title, subtitle }) => {
     return (
@@ -29,9 +30,11 @@ const AuthLayout = ({ children, title, subtitle }) => {
                     {children}
                 </div>
 
-                <p className="text-center text-slate-500 text-sm mt-6">
+                <p className="text-center text-slate-500 text-sm mt-6 mb-4">
                     Ajudante de Compras
                 </p>
+
+                <AdSenseBanner dataAdSlot="3978594176" />
             </motion.div>
         </div>
     );
