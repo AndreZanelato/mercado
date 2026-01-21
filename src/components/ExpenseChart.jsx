@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { BarChart3 } from 'lucide-react';
-import { supabase } from '@/lib/supabase';
+import { db } from '@/lib/firebase';
 import { useAuth } from '@/contexts/AuthContext';
+import { collection, query, where, getDocs } from 'firebase/firestore';
 
 const ExpenseChart = ({ selectedMonth }) => {
     const { user } = useAuth();
@@ -23,15 +24,15 @@ const ExpenseChart = ({ selectedMonth }) => {
                     const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
 
                     // Buscar produtos do mês filtrados por user_id
-                    const { data, error } = await supabase
-                        .from('products')
-                        .select('price, quantity')
-                        .eq('month_key', monthKey)
-                        .eq('user_id', user.id);
+                    const q = query(
+                        collection(db, 'products'),
+                        where('month_key', '==', monthKey),
+                        where('userId', '==', user.uid)
+                    );
+                    const querySnapshot = await getDocs(q);
+                    const products = querySnapshot.docs.map(doc => doc.data());
 
-                    if (error) throw error;
-
-                    const total = (data || []).reduce((sum, p) => sum + (p.price * p.quantity), 0);
+                    const total = products.reduce((sum, p) => sum + (p.price * p.quantity), 0);
 
                     let monthLabel = date.toLocaleDateString('pt-BR', { month: 'short' });
                     monthLabel = monthLabel.replace('.', '');

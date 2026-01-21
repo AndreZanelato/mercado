@@ -25,7 +25,7 @@ function App() {
         return (
             <>
                 <Helmet>
-                    <title>Login - Ajudante de Compras</title>
+                    <title>Login - Carrinho de Bolso</title>
                 </Helmet>
                 <AuthPage />
                 <Toaster />
@@ -37,7 +37,7 @@ function App() {
     return (
         <>
             <Helmet>
-                <title>Ajudante de Compras</title>
+                <title>Carrinho de Bolso</title>
                 <meta name="description" content="Acompanhe suas despesas de compras, compare gastos mensais e visualize seu histórico de compras." />
             </Helmet>
             <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100">

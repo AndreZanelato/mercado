@@ -12,7 +12,8 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/components/ui/use-toast';
 import { Plus, Check, Weight } from 'lucide-react';
-import { supabase } from '@/lib/supabase';
+import { db, auth } from '@/lib/firebase';
+import { collection, getDocs, query, where } from 'firebase/firestore';
 import { parsePrice } from '@/lib/utils';
 
 const DEFAULT_CATEGORIES = [
@@ -38,16 +39,16 @@ const AddProductDialog = ({ open, onOpenChange, onAdd, editingProduct, isSaving 
     useEffect(() => {
         const loadCategories = async () => {
             try {
-                // Buscar categorias únicas do Supabase
-                const { data, error } = await supabase
-                    .from('products')
-                    .select('category');
-
-                if (error) throw error;
-
-                if (data && data.length > 0) {
-                    const usedCategories = [...new Set(data.map(p => p.category).filter(Boolean))];
+                const user = auth.currentUser;
+                if (user) {
+                    // Buscar categorias únicas do Firestore
+                    const q = query(collection(db, 'products'), where('userId', '==', user.uid));
+                    const querySnapshot = await getDocs(q);
+                    const usedCategories = [...new Set(querySnapshot.docs.map(doc => doc.data().category).filter(Boolean))];
                     setAvailableCategories(prev => [...new Set([...prev, ...usedCategories])].sort());
+                } else {
+                    // Fallback para localStorage se não houver usuário
+                    throw new Error("Usuário não autenticado");
                 }
             } catch (error) {
                 console.error("Erro ao carregar categorias:", error);

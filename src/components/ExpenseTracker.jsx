@@ -12,7 +12,19 @@ import ExpenseChart from '@/components/ExpenseChart';
 import FloatingAddButton from '@/components/FloatingAddButton';
 import ScrollHeader from '@/components/ScrollHeader';
 import AdSenseBanner from '@/components/AdSenseBanner';
-import { supabase } from '@/lib/supabase';
+import { db, auth } from '@/lib/firebase';
+import {
+    collection,
+    query,
+    where,
+    getDocs,
+    orderBy,
+    addDoc,
+    updateDoc,
+    deleteDoc,
+    doc,
+    serverTimestamp
+} from 'firebase/firestore';
 
 const ExpenseTracker = () => {
     const { toast } = useToast();
@@ -28,45 +40,25 @@ const ExpenseTracker = () => {
     const [isSaving, setIsSaving] = useState(false);
     const [previousMonthTotal, setPreviousMonthTotal] = useState(0);
 
-    // Load data from Supabase
+    // Load data from Firestore
     useEffect(() => {
         const loadProducts = async () => {
             if (!user) return;
 
             setIsLoading(true);
             try {
-                // Adotar produtos órfãos (produtos sem user_id) antes de carregar
-                const { data: orphanedProducts } = await supabase
-                    .from('products')
-                    .select('id')
-                    .is('user_id', null);
-
-                if (orphanedProducts && orphanedProducts.length > 0) {
-                    const { error: adoptError } = await supabase
-                        .from('products')
-                        .update({ user_id: user.id })
-                        .is('user_id', null);
-
-                    if (!adoptError) {
-                        toast({
-                            title: "Produtos Migrados",
-                            description: `${orphanedProducts.length} produtos existentes foram vinculados à sua conta.`,
-                        });
-                    }
-                }
-
                 // Carregar produtos do mês atual filtrados por user_id
-                const { data, error } = await supabase
-                    .from('products')
-                    .select('*')
-                    .eq('month_key', selectedMonth)
-                    .eq('user_id', user.id)
-                    .order('created_at', { ascending: false });
-
-                if (error) throw error;
+                const q = query(
+                    collection(db, 'products'),
+                    where('month_key', '==', selectedMonth),
+                    where('userId', '==', user.uid),
+                    orderBy('createdAt', 'desc')
+                );
+                const querySnapshot = await getDocs(q);
+                const productsData = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
 
                 // Ensure existing data has category field if missing
-                const migratedData = (data || []).map(p => ({
+                const migratedData = productsData.map(p => ({
                     ...p,
                     category: p.category || 'Outros'
                 }));
@@ -78,18 +70,17 @@ const ExpenseTracker = () => {
                 const prevDate = new Date(year, month - 2, 1);
                 const prevMonth = `${prevDate.getFullYear()}-${String(prevDate.getMonth() + 1).padStart(2, '0')}`;
 
-                const { data: prevData, error: prevError } = await supabase
-                    .from('products')
-                    .select('price, quantity')
-                    .eq('month_key', prevMonth)
-                    .eq('user_id', user.id);
+                const prevQ = query(
+                    collection(db, 'products'),
+                    where('month_key', '==', prevMonth),
+                    where('userId', '==', user.uid)
+                );
+                const prevSnapshot = await getDocs(prevQ);
+                const prevProducts = prevSnapshot.docs.map(doc => doc.data());
 
-                if (!prevError && prevData) {
-                    const prevTotal = prevData.reduce((sum, p) => sum + (p.price * p.quantity), 0);
-                    setPreviousMonthTotal(prevTotal);
-                } else {
-                    setPreviousMonthTotal(0);
-                }
+                const prevTotal = prevProducts.reduce((sum, p) => sum + (p.price * p.quantity), 0);
+                setPreviousMonthTotal(prevTotal);
+
             } catch (error) {
                 console.error('Erro ao carregar produtos:', error);
                 toast({
@@ -120,23 +111,17 @@ const ExpenseTracker = () => {
                 price: product.price || 0,
                 category: product.category || 'Outros',
                 month_key: selectedMonth,
-                user_id: user.id,
-                created_at: new Date().toISOString(),
+                userId: user.uid,
+                createdAt: serverTimestamp(),
                 is_per_kg: product.is_per_kg || false,
                 weight_kg: product.weight_kg || null,
                 price_per_kg: product.price_per_kg || null
             };
 
-            const { data, error } = await supabase
-                .from('products')
-                .insert([newProduct])
-                .select()
-                .single();
-
-            if (error) throw error;
+            const docRef = await addDoc(collection(db, 'products'), newProduct);
 
             // Adiciona o produto na lista local
-            setProducts(prevProducts => [data, ...prevProducts]);
+            setProducts(prevProducts => [{ id: docRef.id, ...newProduct, createdAt: new Date() }, ...prevProducts]);
 
             // Toast diferenciado para produtos por kg
             if (product.is_per_kg) {
@@ -176,23 +161,19 @@ const ExpenseTracker = () => {
     const handleUpdateProduct = async (updatedProduct) => {
         setIsSaving(true);
         try {
+            const productRef = doc(db, 'products', updatedProduct.id);
             const updateData = {
                 name: updatedProduct.name,
                 quantity: updatedProduct.quantity || 0,
                 price: updatedProduct.price || 0,
                 category: updatedProduct.category || 'Outros',
-                updated_at: new Date().toISOString(),
+                updatedAt: serverTimestamp(),
                 is_per_kg: updatedProduct.is_per_kg || false,
                 weight_kg: updatedProduct.weight_kg || null,
                 price_per_kg: updatedProduct.price_per_kg || null
             };
 
-            const { error } = await supabase
-                .from('products')
-                .update(updateData)
-                .eq('id', updatedProduct.id);
-
-            if (error) throw error;
+            await updateDoc(productRef, updateData);
 
             // Atualiza na lista local
             setProducts(prevProducts =>
@@ -220,17 +201,13 @@ const ExpenseTracker = () => {
 
     const handleQuickUpdate = async (id, field, value) => {
         try {
+            const productRef = doc(db, 'products', id);
             const updateData = {
                 [field]: value,
-                updated_at: new Date().toISOString()
+                updatedAt: serverTimestamp()
             };
 
-            const { error } = await supabase
-                .from('products')
-                .update(updateData)
-                .eq('id', id);
-
-            if (error) throw error;
+            await updateDoc(productRef, updateData);
 
             // Atualiza na lista local
             setProducts(prevProducts =>
@@ -253,12 +230,8 @@ const ExpenseTracker = () => {
     const handleDeleteProduct = async (productId) => {
         setIsSaving(true);
         try {
-            const { error } = await supabase
-                .from('products')
-                .delete()
-                .eq('id', productId);
-
-            if (error) throw error;
+            const productRef = doc(db, 'products', productId);
+            await deleteDoc(productRef);
 
             // Remove da lista local
             setProducts(prevProducts => prevProducts.filter(p => p.id !== productId));
@@ -305,7 +278,7 @@ const ExpenseTracker = () => {
                     <div>
                         <h1 className="text-4xl font-bold text-slate-800 flex items-center gap-3">
                             <ShoppingCart className="w-10 h-10 text-blue-600" />
-                            Ajudante de Compras
+                            Carrinho de Bolso
                         </h1>
                         <p className="text-slate-600 mt-2">Acompanhe e compare suas despesas mensais de compras</p>
                     </div>

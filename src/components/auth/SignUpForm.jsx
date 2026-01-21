@@ -59,12 +59,9 @@ const SignUpForm = ({ onToggleMode }) => {
         try {
             await signUp(formData.email, formData.password);
 
-            // Fazer logout para forçar o usuário a fazer login manualmente
-            await signOut();
-
             toast({
                 title: 'Conta criada com sucesso!',
-                description: 'Faça login para acessar o Ajudante de Compras.',
+                description: 'Faça login para acessar o Carrinho de Bolso.',
             });
 
             // Alternar para o modo de login
@@ -76,11 +73,11 @@ const SignUpForm = ({ onToggleMode }) => {
 
             let errorMessage = 'Erro ao criar conta. Tente novamente.';
 
-            if (error.message.includes('User already registered')) {
+            if (error.code === 'auth/email-already-in-use') {
                 errorMessage = 'Este e-mail já está cadastrado. Faça login.';
-            } else if (error.message.includes('Password')) {
+            } else if (error.code === 'auth/weak-password') {
                 errorMessage = 'Senha inválida. Verifique os requisitos.';
-            } else if (error.message.includes('Network')) {
+            } else if (error.code === 'auth/network-request-failed') {
                 errorMessage = 'Erro de conexão. Verifique sua internet.';
             }
 

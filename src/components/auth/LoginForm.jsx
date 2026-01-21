@@ -51,11 +51,9 @@ const LoginForm = ({ onToggleMode }) => {
 
             let errorMessage = 'Erro ao fazer login. Tente novamente.';
 
-            if (error.message.includes('Invalid login credentials')) {
+            if (error.code === 'auth/invalid-credential') {
                 errorMessage = 'E-mail ou senha incorretos.';
-            } else if (error.message.includes('Email not confirmed')) {
-                errorMessage = 'Por favor, confirme seu e-mail antes de fazer login.';
-            } else if (error.message.includes('Network')) {
+            } else if (error.code === 'auth/network-request-failed') {
                 errorMessage = 'Erro de conexão. Verifique sua internet.';
             }
 

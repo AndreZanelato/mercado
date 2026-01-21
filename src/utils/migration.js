@@ -1,11 +1,17 @@
-import { supabase } from '@/lib/supabase';
+import { db, auth } from '@/lib/firebase';
+import { collection, writeBatch, doc } from 'firebase/firestore';
 
 /**
- * Migra dados do localStorage para o Supabase
+ * Migra dados do localStorage para o Firestore
  * Esta função deve ser executada uma única vez por usuário
  */
-export const migrateLocalStorageToSupabase = async () => {
-    const MIGRATION_KEY = 'hasMigratedToSupabase';
+export const migrateLocalStorageToFirestore = async () => {
+    const MIGRATION_KEY = 'hasMigratedToFirestore';
+    const user = auth.currentUser;
+
+    if (!user) {
+        return { success: false, message: 'Usuário não autenticado' };
+    }
 
     // Verificar se já foi migrado
     if (localStorage.getItem(MIGRATION_KEY) === 'true') {
@@ -25,7 +31,7 @@ export const migrateLocalStorageToSupabase = async () => {
         const allData = JSON.parse(savedData);
         const productsToMigrate = [];
 
-        // Converter dados do formato localStorage para formato Supabase
+        // Converter dados do formato localStorage para formato Firestore
         Object.entries(allData).forEach(([monthKey, products]) => {
             products.forEach(product => {
                 productsToMigrate.push({
@@ -34,8 +40,9 @@ export const migrateLocalStorageToSupabase = async () => {
                     price: product.price || 0,
                     category: product.category || 'Outros',
                     month_key: monthKey,
-                    created_at: product.createdAt || product.created_at || new Date().toISOString(),
-                    updated_at: product.updatedAt || product.updated_at || null
+                    createdAt: product.createdAt || product.created_at || new Date(),
+                    updatedAt: product.updatedAt || product.updated_at || null,
+                    userId: user.uid
                 });
             });
         });
@@ -53,18 +60,17 @@ export const migrateLocalStorageToSupabase = async () => {
         let migratedCount = 0;
 
         for (let i = 0; i < productsToMigrate.length; i += batchSize) {
-            const batch = productsToMigrate.slice(i, i + batchSize);
+            const batch = writeBatch(db);
+            const batchProducts = productsToMigrate.slice(i, i + batchSize);
 
-            const { data, error } = await supabase
-                .from('products')
-                .insert(batch);
+            batchProducts.forEach((product) => {
+                const docRef = doc(collection(db, 'products'));
+                batch.set(docRef, product);
+            });
 
-            if (error) {
-                console.error('Erro ao migrar lote:', error);
-                throw error;
-            }
+            await batch.commit();
 
-            migratedCount += batch.length;
+            migratedCount += batchProducts.length;
             console.log(`Migrados ${migratedCount}/${productsToMigrate.length} produtos`);
         }
 
@@ -93,7 +99,7 @@ export const migrateLocalStorageToSupabase = async () => {
  * Reseta o flag de migração (usar apenas para testes)
  */
 export const resetMigrationFlag = () => {
-    localStorage.removeItem('hasMigratedToSupabase');
+    localStorage.removeItem('hasMigratedToFirestore');
     console.log('Flag de migração resetado.');
 };
 
@@ -101,7 +107,7 @@ export const resetMigrationFlag = () => {
  * Verifica se a migração já foi realizada
  */
 export const hasMigrated = () => {
-    return localStorage.getItem('hasMigratedToSupabase') === 'true';
+    return localStorage.getItem('hasMigratedToFirestore') === 'true';
 };
 
 /**
@@ -118,7 +124,7 @@ export const backupLocalStorage = () => {
         // Criar um blob e fazer download
         const blob = new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' });
         const url = URL.createObjectURL(blob);
-        const link = document.createElement('a');
+        const link = document..createElement('a');
         link.href = url;
         link.download = `backup-mercado-${new Date().toISOString().split('T')[0]}.json`;
         document.body.appendChild(link);

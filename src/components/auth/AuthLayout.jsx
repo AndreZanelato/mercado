@@ -3,9 +3,9 @@ import { motion } from 'framer-motion';
 import { ShoppingCart } from 'lucide-react';
 import AdSenseBanner from '../AdSenseBanner';
 
-const AuthLayout = ({ children, title, subtitle }) => {
+const AuthLayout = ({ children, title, subtitle, id }) => {
     return (
-        <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 flex items-center justify-center p-4">
+        <div id={id} className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 flex items-center justify-center p-4">
             <motion.div
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
@@ -29,10 +29,6 @@ const AuthLayout = ({ children, title, subtitle }) => {
                 <div className="bg-white rounded-2xl shadow-xl p-8">
                     {children}
                 </div>
-
-                <p className="text-center text-slate-500 text-sm mt-6 mb-4">
-                    Ajudante de Compras
-                </p>
 
                 <AdSenseBanner dataAdSlot="3978594176" />
             </motion.div>
