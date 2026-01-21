@@ -1,0 +1,7 @@
+{
+  "projects": {
+    "firebase deploy --only firestore:rules": "mercado-a6628"
+  },
+  "targets": {},
+  "etags": {}
+}

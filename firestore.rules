@@ -1,0 +1,32 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Regras para a coleção 'users'
+    match /users/{userId} {
+      // Permite que o usuário crie seu próprio perfil
+      allow create: if request.auth.uid == userId;
+      // Permite que o usuário leia e atualize seu próprio perfil
+      allow read, update: if request.auth.uid == userId;
+    }
+
+    // Regras para a coleção 'products'
+    match /products/{productId} {
+      // Permite que usuários autenticados criem produtos
+      // A regra de criação valida se o 'userId' do documento é o mesmo do usuário autenticado
+      allow create: if request.auth != null && request.resource.data.userId == request.auth.uid;
+
+      // Permite que usuários leiam produtos se o 'userId' no documento corresponder
+      // à sua própria UID. Isso é fundamental para as consultas.
+      allow read: if request.auth != null && resource.data.userId == request.auth.uid;
+
+      // Permite que o proprietário do produto atualize ou exclua seu produto
+      allow update, delete: if request.auth != null && resource.data.userId == request.auth.uid;
+    }
+
+    // Regras para a coleção 'feedback'
+    match /feedback/{feedbackId} {
+      // Qualquer usuário autenticado pode enviar feedback
+      allow create: if request.auth != null;
+    }
+  }
+}

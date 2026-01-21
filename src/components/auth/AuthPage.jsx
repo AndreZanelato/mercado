@@ -5,8 +5,8 @@ import SignUpForm from './SignUpForm';
 import HeroSection from '../landing/HeroSection';
 import DemoSection from '../landing/DemoSection';
 import Footer from '../landing/Footer';
-import PrivacyPolicy from '../legal/PrivacyPolicy';
-import TermsOfService from '../legal/TermsOfService';
+import Privacy from '../legal/Privacy';
+import Terms from '../legal/Terms';
 
 const AuthPage = () => {
     const [isLogin, setIsLogin] = useState(true);
@@ -27,11 +27,11 @@ const AuthPage = () => {
     };
 
     if (path === '/legal/privacy-policy') {
-        return <PrivacyPolicy />;
+        return <Privacy />;
     }
 
     if (path === '/legal/terms-of-service') {
-        return <TermsOfService />;
+        return <Terms />;
     }
 
     return (
